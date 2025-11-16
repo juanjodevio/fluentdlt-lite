@@ -1,6 +1,6 @@
 ## 🧠 Philosophy
 
-**FluentDLT** (`fldt`) is a fluent interface wrapper for [dlt (data load tool)](https://dlthub.com) that makes building data pipelines intuitive and readable. Write pipelines that read like English, with full type safety and comprehensive error handling.
+**FluentDLT-lite** (`fldt`) is a fluent interface wrapper for [dlt (data load tool)](https://dlthub.com) that makes building data pipelines intuitive and readable. Write pipelines that read like English, with full type safety and comprehensive error handling.
 
 ```python
 from fldt import FluentPipeline
