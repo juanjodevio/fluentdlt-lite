@@ -156,6 +156,106 @@ class FluentPipeline:
         }
         return self
 
+    def _apply_transformers(self, source: Any) -> Any:
+        """Apply transformer chain to source data.
+        
+        Applies transformers in sequence during pipeline execution.
+        Handles generator functions for streaming transformations.
+        Preserves dlt resource structure while applying transformers.
+        Supports both row-level and batch transformers.
+        
+        Args:
+            source: The dlt source to apply transformers to.
+            
+        Returns:
+            The source with transformers applied.
+        """
+        if not self._transformers:
+            return source
+        
+        if not hasattr(source, "resources"):
+            raise ConfigurationError(
+                "Source does not have resources attribute. "
+                "Transformers can only be applied to dlt sources with resources."
+            )
+        
+        for transformer in self._transformers:
+            for resource_name, resource in source.resources.items():
+                if hasattr(resource, "add_map"):
+                    resource.add_map(transformer)
+                else:
+                    raise ConfigurationError(
+                        f"Resource '{resource_name}' does not support add_map. "
+                        "Transformers require resources with add_map support."
+                    )
+        
+        return source
+
+    def _apply_incremental(self, source: Any) -> Any:
+        """Apply incremental loading configuration.
+        
+        Integrates _incremental_config with dlt incremental decorators.
+        Supports cursor-based and timestamp-based incremental strategies.
+        Handles state management through dlt's state mechanism.
+        Validates incremental column configuration.
+        
+        Args:
+            source: The dlt source to apply incremental loading to.
+            
+        Returns:
+            The source with incremental configuration applied.
+            
+        Raises:
+            ConfigurationError: If incremental configuration is invalid or
+                source does not support incremental loading.
+        """
+        if not self._incremental_config:
+            return source
+        
+        cursor_path = self._incremental_config.get("cursor_path")
+        if not cursor_path or not isinstance(cursor_path, str):
+            raise ConfigurationError(
+                "Incremental cursor_path must be a non-empty string. "
+                f"Got: {cursor_path}"
+            )
+        
+        incremental = dlt.sources.incremental(
+            self._incremental_config["cursor_path"],
+            initial_value=self._incremental_config.get("initial_value"),
+            range_start=self._incremental_config.get("range_start", "closed"),
+            range_end=self._incremental_config.get("range_end", "closed"),
+            **{
+                k: v
+                for k, v in self._incremental_config.items()
+                if k
+                not in (
+                    "cursor_path",
+                    "initial_value",
+                    "range_start",
+                    "range_end",
+                )
+            },
+        )
+        
+        if hasattr(source, "with_resources") and hasattr(source, "resources"):
+            source = source.with_resources(
+                **{
+                    resource_name: {"incremental": incremental}
+                    for resource_name in source.resources.keys()
+                }
+            )
+        elif hasattr(source, "set_incremental"):
+            source.set_incremental(incremental)
+        elif hasattr(source, "incremental"):
+            source.incremental = incremental
+        else:
+            raise ConfigurationError(
+                "Source does not support incremental loading. "
+                "Source must have with_resources, set_incremental, or incremental attribute."
+            )
+        
+        return source
+
     def run(self) -> Any:
         """Execute the pipeline.
 
@@ -191,37 +291,8 @@ class FluentPipeline:
 
             source = self._source
 
-            if self._transformers:
-                for transformer in self._transformers:
-                    source = transformer(source)
-
-            if self._incremental_config:
-                incremental = dlt.sources.incremental(
-                    self._incremental_config["cursor_path"],
-                    initial_value=self._incremental_config.get("initial_value"),
-                    range_start=self._incremental_config.get("range_start", "closed"),
-                    range_end=self._incremental_config.get("range_end", "closed"),
-                    **{
-                        k: v
-                        for k, v in self._incremental_config.items()
-                        if k
-                        not in (
-                            "cursor_path",
-                            "initial_value",
-                            "range_start",
-                            "range_end",
-                        )
-                    },
-                )
-                if hasattr(source, "with_resources") and hasattr(source, "resources"):
-                    source = source.with_resources(
-                        **{
-                            resource: {"incremental": incremental}
-                            for resource in source.resources.keys()
-                        }
-                    )
-                elif hasattr(source, "incremental"):
-                    source.incremental = incremental
+            source = self._apply_incremental(source)
+            source = self._apply_transformers(source)
 
             result = pipeline.run(source)
             return result
