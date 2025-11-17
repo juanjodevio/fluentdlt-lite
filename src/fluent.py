@@ -28,16 +28,44 @@ class FluentPipeline:
         credentials: Union[ConnectionStringCredentials, Engine, str],
         table_name: str,
         schema: str | None = None,
+        **kwargs,
     ) -> "FluentPipeline":
-        pass
+        """Configure SQL table as source."""
+        from dlt.sources.sql_database import sql_table
+
+        if isinstance(credentials, str):
+            credentials = ConnectionStringCredentials(credentials)
+
+        self._source = sql_table(
+            table=table_name,
+            schema=schema,
+            credentials=credentials,
+            **kwargs,
+        )
+        return self
 
     def from_sql_query(
         self,
         credentials: Union[ConnectionStringCredentials, Engine, str],
         query: str,
         table_name: str,
+        **kwargs,
     ) -> "FluentPipeline":
-        pass
+        """Configure SQL query as source."""
+        from dlt.sources.sql_database import sql_database
+
+        if not query or not query.strip():
+            raise ValidationError("Query must be a non-empty string")
+
+        if isinstance(credentials, str):
+            credentials = ConnectionStringCredentials(credentials)
+
+        self._source = sql_database(
+            credentials=credentials,
+            table_names=[table_name],
+            **kwargs,
+        ).with_resources(**{table_name: {"query": query}})
+        return self
 
     def from_s3(
         self,
@@ -46,11 +74,20 @@ class FluentPipeline:
         file_glob: str = "*",
         files_per_page: int = DEFAULT_CHUNK_SIZE,
         extract_content: bool = False,
-        kwargs: Optional[Dict[str, Any]] = None,
-        client_kwargs: Optional[Dict[str, Any]] = None,
-        incremental: Optional[dlt.sources.incremental[Any]] = None,
+        **kwargs,
     ) -> "FluentPipeline":
-        pass
+        """Configure S3 bucket as source."""
+        from dlt.sources.filesystem import filesystem
+
+        self._source = filesystem(
+            bucket_url=bucket_url,
+            credentials=credentials,
+            file_glob=file_glob,
+            files_per_page=files_per_page,
+            extract_content=extract_content,
+            **kwargs,
+        )
+        return self
 
     def to_redshift(
         self,
