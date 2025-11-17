@@ -55,3 +55,17 @@ class ExecutionError(FluentDLTLiteError):
     """
 
     pass
+
+
+class AdapterError(FluentDLTLiteError):
+    """Raised when adapter/dependency import or initialization fails.
+
+    This exception is raised when:
+    - Required dependencies (e.g., dlt) cannot be imported
+    - Adapter modules fail to initialize
+    - Dependency version incompatibilities are detected
+
+    The original exception is typically chained via __cause__.
+    """
+
+    pass

@@ -1,4 +1,5 @@
 from .exceptions import (
+    AdapterError,
     ConfigurationError,
     ExecutionError,
     FluentDLTLiteError,
@@ -12,4 +13,5 @@ __all__ = [
     "ValidationError",
     "ConfigurationError",
     "ExecutionError",
+    "AdapterError",
 ]

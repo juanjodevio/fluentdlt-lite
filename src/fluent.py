@@ -9,7 +9,17 @@ from dlt.common.configuration.specs.connection_string_credentials import (
 from fsspec import AbstractFileSystem
 from sqlalchemy import Engine, text
 
-from .exceptions import ConfigurationError, ExecutionError, ValidationError
+from .exceptions import AdapterError, ConfigurationError, ExecutionError, ValidationError
+
+_SQL_DATABASE_IMPORT_ERROR = (
+    "Failed to import dlt SQL database adapter. "
+    "Please ensure dlt[sql-database] is installed: pip install 'dlt[sql-database]'"
+)
+
+_FILESYSTEM_IMPORT_ERROR = (
+    "Failed to import dlt filesystem adapter. "
+    "Please ensure dlt is properly installed: pip install dlt"
+)
 
 DEFAULT_CHUNK_SIZE = 10000
 
@@ -100,8 +110,7 @@ class FluentPipeline:
         **kwargs,
     ) -> "FluentPipeline":
         """Configure SQL table as source."""
-        from dlt.sources.sql_database import sql_table
-
+        # Validate before importing dlt to avoid import errors on invalid input
         self._validate_credentials(credentials, "SQL")
         self._validate_table_name(table_name)
         
@@ -110,6 +119,11 @@ class FluentPipeline:
 
         if isinstance(credentials, str):
             credentials = ConnectionStringCredentials(credentials)
+
+        try:
+            from dlt.sources.sql_database import sql_table
+        except (ImportError, AttributeError) as e:
+            raise AdapterError(_SQL_DATABASE_IMPORT_ERROR) from e
 
         self._source = sql_table(
             table=table_name,
@@ -127,14 +141,18 @@ class FluentPipeline:
         **kwargs,
     ) -> "FluentPipeline":
         """Configure SQL query as source."""
-        from dlt.sources.sql_database import sql_database
-
+        # Validate before importing dlt to avoid import errors on invalid input
         self._validate_credentials(credentials, "SQL")
         self._validate_query(query)
         self._validate_table_name(table_name)
 
         if isinstance(credentials, str):
             credentials = ConnectionStringCredentials(credentials)
+
+        try:
+            from dlt.sources.sql_database import sql_database
+        except (ImportError, AttributeError) as e:
+            raise AdapterError(_SQL_DATABASE_IMPORT_ERROR) from e
 
         self._source = sql_database(
             credentials=credentials,
@@ -153,8 +171,7 @@ class FluentPipeline:
         **kwargs,
     ) -> "FluentPipeline":
         """Configure S3 bucket as source."""
-        from dlt.sources.filesystem import filesystem
-
+        # Validate before importing dlt to avoid import errors on invalid input
         if bucket_url is dlt.secrets.value:
             # Allow secrets.value for configuration via secrets
             pass
@@ -166,6 +183,11 @@ class FluentPipeline:
         
         if not isinstance(files_per_page, int) or files_per_page <= 0:
             raise ValidationError("files_per_page must be a positive integer")
+
+        try:
+            from dlt.sources.filesystem import filesystem
+        except (ImportError, AttributeError) as e:
+            raise AdapterError(_FILESYSTEM_IMPORT_ERROR) from e
 
         self._source = filesystem(
             bucket_url=bucket_url,
