@@ -1,10 +1,10 @@
-from .fluent import FluentPipeline
 from .exceptions import (
-    FluentDLTLiteError,
-    ValidationError,
     ConfigurationError,
     ExecutionError,
+    FluentDLTLiteError,
+    ValidationError,
 )
+from .fluent import FluentPipeline
 
 __all__ = [
     "FluentPipeline",
@@ -13,4 +13,3 @@ __all__ = [
     "ConfigurationError",
     "ExecutionError",
 ]
-

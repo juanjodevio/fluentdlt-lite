@@ -1,12 +1,12 @@
-from typing import Any, Union, Optional, Dict
+from typing import Any, Dict, Optional, Union
 
+import dlt
+from dlt.common.configuration.specs.aws_credentials import AwsCredentials
 from dlt.common.configuration.specs.connection_string_credentials import (
     ConnectionStringCredentials,
 )
-from dlt.common.configuration.specs.aws_credentials import AwsCredentials
 from fsspec import AbstractFileSystem
 from sqlalchemy import Engine
-import dlt
 
 DEFAULT_CHUNK_SIZE = 10000
 
@@ -40,9 +40,7 @@ class FluentPipeline:
     def from_s3(
         self,
         bucket_url: str = dlt.secrets.value,
-        credentials: Optional[
-            Union[AbstractFileSystem, AwsCredentials]
-        ] = None,
+        credentials: Optional[Union[AbstractFileSystem, AwsCredentials]] = None,
         file_glob: str = "*",
         files_per_page: int = DEFAULT_CHUNK_SIZE,
         extract_content: bool = False,

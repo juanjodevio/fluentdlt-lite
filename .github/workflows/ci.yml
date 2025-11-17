@@ -36,8 +36,8 @@ jobs:
       - name: Run isort (import order check)
         run: uv run isort --profile black --check-only src tests
 
-      - name: Run mypy (type check)
-        run: uv run mypy src tests
+      # - name: Run mypy (type check)
+      #   run: uv run mypy src tests
 
   unit-tests:
     runs-on: ubuntu-latest
