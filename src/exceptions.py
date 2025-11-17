@@ -55,4 +55,3 @@ class ExecutionError(FluentDLTLiteError):
     """
 
     pass
-

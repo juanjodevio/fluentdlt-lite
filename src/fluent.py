@@ -1,15 +1,17 @@
-from typing import Any, Union,Optional,Dict
+from typing import Any, Dict, Optional, Union
 
-from dlt.common.configuration.specs.connection_string_credentials import (
-    ConnectionStringCredentials
-)
-from dlt.common.configuration.specs.aws_credentials import FilemCredetials
-from sqlalchemy import Engine
 import dlt
+from dlt.common.configuration.specs.aws_credentials import AwsCredentials
+from dlt.common.configuration.specs.connection_string_credentials import (
+    ConnectionStringCredentials,
+)
+from fsspec import AbstractFileSystem
+from sqlalchemy import Engine
 
 DEFAULT_CHUNK_SIZE = 10000
 
-class FLuentPipeline:
+
+class FluentPipeline:
     def __init__(self):
         self._source: Any | None = None
         self._destination: Any | None = None
@@ -24,7 +26,7 @@ class FLuentPipeline:
         credentials: Union[ConnectionStringCredentials, Engine, str],
         table_name: str,
         schema: str | None = None,
-    ) -> "FLuentPipeline":
+    ) -> "FluentPipeline":
         pass
 
     def from_sql_query(
@@ -32,21 +34,20 @@ class FLuentPipeline:
         credentials: Union[ConnectionStringCredentials, Engine, str],
         query: str,
         table_name: str,
-    ) -> "FLuentPipeline":
+    ) -> "FluentPipeline":
         pass
 
     def from_s3(
+        self,
         bucket_url: str = dlt.secrets.value,
-        credentials: Union[
-            FileSystemCredentials, AbstractFileSystem
-        ] ,
+        credentials: Optional[Union[AbstractFileSystem, AwsCredentials]] = None,
         file_glob: str = "*",
         files_per_page: int = DEFAULT_CHUNK_SIZE,
         extract_content: bool = False,
         kwargs: Optional[Dict[str, Any]] = None,
         client_kwargs: Optional[Dict[str, Any]] = None,
         incremental: Optional[dlt.sources.incremental[Any]] = None,
-    ) -> "FLuentPipeline":
+    ) -> "FluentPipeline":
         pass
 
     def to_redshift():
