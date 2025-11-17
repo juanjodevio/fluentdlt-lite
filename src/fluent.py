@@ -26,6 +26,72 @@ class FluentPipeline:
         self._dataset_name: str | None = None
         self._options: dict[str, Any] = {}
 
+    def _validate_credentials(
+        self, credentials: Any, source_type: str
+    ) -> None:
+        """Validate credentials for source type.
+        
+        Args:
+            credentials: The credentials to validate
+            source_type: Type of source (e.g., "SQL", "S3")
+            
+        Raises:
+            ValidationError: If credentials are invalid or missing
+        """
+        if credentials is None:
+            raise ValidationError(
+                f"Credentials required for {source_type} source"
+            )
+        # Additional validation based on type
+        if isinstance(credentials, str):
+            if not credentials.strip():
+                raise ValidationError(
+                    f"Credentials string cannot be empty for {source_type} source"
+                )
+
+    def _validate_table_name(self, table_name: str) -> None:
+        """Validate SQL table name.
+        
+        Args:
+            table_name: The table name to validate
+            
+        Raises:
+            ValidationError: If table name is invalid
+        """
+        if not table_name or not isinstance(table_name, str):
+            raise ValidationError("Table name must be a non-empty string")
+        if not table_name.strip():
+            raise ValidationError("Table name cannot be whitespace only")
+
+    def _validate_query(self, query: str) -> None:
+        """Validate SQL query.
+        
+        Args:
+            query: The query string to validate
+            
+        Raises:
+            ValidationError: If query is invalid
+        """
+        if not query or not isinstance(query, str) or not query.strip():
+            raise ValidationError("Query must be a non-empty string")
+
+    def _validate_destination_string(self, destination: str) -> None:
+        """Validate destination string format.
+        
+        Validates that destination is a non-empty string. Actual destination
+        support is validated by dlt when the pipeline is created.
+        
+        Args:
+            destination: The destination string to validate
+            
+        Raises:
+            ValidationError: If destination format is invalid
+        """
+        if not destination or not isinstance(destination, str):
+            raise ValidationError("Destination must be a non-empty string")
+        if not destination.strip():
+            raise ValidationError("Destination cannot be whitespace only")
+
     def from_sql_table(
         self,
         credentials: Union[ConnectionStringCredentials, Engine, str],
@@ -35,6 +101,12 @@ class FluentPipeline:
     ) -> "FluentPipeline":
         """Configure SQL table as source."""
         from dlt.sources.sql_database import sql_table
+
+        self._validate_credentials(credentials, "SQL")
+        self._validate_table_name(table_name)
+        
+        if schema is not None and (not isinstance(schema, str) or not schema.strip()):
+            raise ValidationError("Schema must be a non-empty string if provided")
 
         if isinstance(credentials, str):
             credentials = ConnectionStringCredentials(credentials)
@@ -57,8 +129,9 @@ class FluentPipeline:
         """Configure SQL query as source."""
         from dlt.sources.sql_database import sql_database
 
-        if not query or not query.strip():
-            raise ValidationError("Query must be a non-empty string")
+        self._validate_credentials(credentials, "SQL")
+        self._validate_query(query)
+        self._validate_table_name(table_name)
 
         if isinstance(credentials, str):
             credentials = ConnectionStringCredentials(credentials)
@@ -82,6 +155,18 @@ class FluentPipeline:
         """Configure S3 bucket as source."""
         from dlt.sources.filesystem import filesystem
 
+        if bucket_url is dlt.secrets.value:
+            # Allow secrets.value for configuration via secrets
+            pass
+        elif not bucket_url or not isinstance(bucket_url, str) or not bucket_url.strip():
+            raise ValidationError("bucket_url must be a non-empty string")
+        
+        if file_glob is not None and (not isinstance(file_glob, str) or not file_glob.strip()):
+            raise ValidationError("file_glob must be a non-empty string if provided")
+        
+        if not isinstance(files_per_page, int) or files_per_page <= 0:
+            raise ValidationError("files_per_page must be a positive integer")
+
         self._source = filesystem(
             bucket_url=bucket_url,
             credentials=credentials,
@@ -92,6 +177,30 @@ class FluentPipeline:
         )
         return self
 
+    def to(
+        self,
+        destination: str,
+        **kwargs,
+    ) -> "FluentPipeline":
+        """Configure destination by string name.
+        
+        Args:
+            destination: Destination name (e.g., "duckdb", "postgres", "bigquery")
+            **kwargs: Additional destination-specific configuration
+            
+        Returns:
+            Self for method chaining.
+            
+        Raises:
+            ValidationError: If destination string is not supported
+        """
+        self._validate_destination_string(destination)
+        self._destination = {
+            "destination": destination,
+            **kwargs,
+        }
+        return self
+
     def to_redshift(
         self,
         credentials: Union[str, dict],
@@ -100,6 +209,15 @@ class FluentPipeline:
         **kwargs,
     ) -> "FluentPipeline":
         """Configure Redshift as destination."""
+        if credentials is None:
+            raise ValidationError("Credentials required for Redshift destination")
+        
+        if not database or not isinstance(database, str) or not database.strip():
+            raise ValidationError("Database name must be a non-empty string")
+        
+        if schema is not None and (not isinstance(schema, str) or not schema.strip()):
+            raise ValidationError("Schema must be a non-empty string if provided")
+        
         self._destination = {
             "destination": "redshift",
             "credentials": credentials,
@@ -122,7 +240,18 @@ class FluentPipeline:
             bucket_url: S3 bucket URL (required)
             credentials: AWS credentials or filesystem credentials
             format: Output format - parquet, jsonl, or csv (default: parquet)
+            
+        Raises:
+            ValidationError: If bucket_url or format is invalid
         """
+        if not bucket_url or not isinstance(bucket_url, str) or not bucket_url.strip():
+            raise ValidationError("bucket_url must be a non-empty string")
+        
+        if format not in ("parquet", "jsonl", "csv"):
+            raise ValidationError(
+                f"Invalid format: {format}. Must be one of: parquet, jsonl, csv"
+            )
+        
         self._destination = {
             "destination": "filesystem",
             "bucket_url": bucket_url,
@@ -885,53 +1014,100 @@ class FluentPipeline:
             The result of the pipeline execution.
 
         Raises:
-            ConfigurationError: If source or destination is not set.
+            ConfigurationError: If source, destination, or transformers are invalid.
+            ValidationError: If input validation fails.
             ExecutionError: If pipeline execution fails.
         """
+        # Validate configuration
         if self._source is None:
-            raise ConfigurationError("Source must be set before running pipeline")
+            raise ConfigurationError(
+                "Pipeline source not configured. "
+                "Call from_sql_table(), from_sql_query(), or from_s3() first."
+            )
+        
         if self._destination is None:
-            raise ConfigurationError("Destination must be set before running pipeline")
-
+            raise ConfigurationError(
+                "Pipeline destination not configured. "
+                "Call to() or specific destination method first."
+            )
+        
+        # Validate transformers
+        for i, transformer in enumerate(self._transformers):
+            if not callable(transformer):
+                raise ConfigurationError(
+                    f"Transformer at index {i} is not callable: {type(transformer)}"
+                )
+        
         destination_config = self._destination
         destination_name = destination_config.get("destination")
         if not destination_name:
             raise ConfigurationError("Destination name is required")
 
+        # Execute with error handling
         try:
             pipeline_name = self._pipeline_name or "fluent_pipeline"
             dataset_name = self._dataset_name or "dataset"
 
-            pipeline = dlt.pipeline(
-                pipeline_name=pipeline_name,
-                destination=destination_name,
-                dataset_name=dataset_name,
-            )
+            try:
+                pipeline = dlt.pipeline(
+                    pipeline_name=pipeline_name,
+                    destination=destination_name,
+                    dataset_name=dataset_name,
+                )
+            except Exception as e:
+                raise ExecutionError(
+                    f"Failed to create dlt pipeline: {str(e)}"
+                ) from e
 
             source = self._source
 
             # Check for partitioned or split loading
             if self._partition_config is not None:
-                result = self._execute_partitioned_load(pipeline, source)
-                # After partitioning, continue with regular incremental if needed
-                if result and not result.is_empty:
-                    source = self._apply_incremental(source)
-                    source = self._apply_transformers(source)
-                    result = pipeline.run(source)
-                return result
+                try:
+                    result = self._execute_partitioned_load(pipeline, source)
+                    # After partitioning, continue with regular incremental if needed
+                    if result and not result.is_empty:
+                        source = self._apply_incremental(source)
+                        source = self._apply_transformers(source)
+                        result = pipeline.run(source)
+                    return result
+                except Exception as e:
+                    if isinstance(e, (ConfigurationError, ValidationError)):
+                        raise
+                    raise ExecutionError(
+                        f"Partitioned load execution failed: {str(e)}"
+                    ) from e
             
             elif self._split_config is not None:
-                result = self._execute_split_load(pipeline, source)
-                return result
+                try:
+                    result = self._execute_split_load(pipeline, source)
+                    return result
+                except Exception as e:
+                    if isinstance(e, (ConfigurationError, ValidationError)):
+                        raise
+                    raise ExecutionError(
+                        f"Split load execution failed: {str(e)}"
+                    ) from e
             
             else:
                 # Regular incremental load
-                source = self._apply_incremental(source)
-                source = self._apply_transformers(source)
-                result = pipeline.run(source)
-                return result
+                try:
+                    source = self._apply_incremental(source)
+                    source = self._apply_transformers(source)
+                    result = pipeline.run(source)
+                    return result
+                except Exception as e:
+                    if isinstance(e, (ConfigurationError, ValidationError)):
+                        raise
+                    raise ExecutionError(
+                        f"Pipeline execution failed: {str(e)}"
+                    ) from e
 
-        except ConfigurationError:
+        except (ConfigurationError, ValidationError):
+            raise
+        except ExecutionError:
             raise
         except Exception as e:
-            raise ExecutionError(f"Pipeline execution failed: {str(e)}") from e
+            raise ExecutionError(
+                f"Pipeline execution failed: {str(e)}"
+            ) from e
