@@ -91,28 +91,40 @@ class FluentPipeline:
 
     def to_redshift(
         self,
-        credentials: Optional[Union[ConnectionStringCredentials, str]] = None,
+        credentials: Union[str, dict],
+        database: str,
+        schema: Optional[str] = None,
         **kwargs,
     ) -> "FluentPipeline":
-        """Configure Redshift as pipeline destination."""
+        """Configure Redshift as destination."""
         self._destination = {
             "destination": "redshift",
             "credentials": credentials,
+            "database": database,
+            "schema": schema,
             **kwargs,
         }
         return self
 
     def to_s3(
         self,
-        bucket_url: Optional[str] = None,
-        credentials: Optional[Union[AbstractFileSystem, AwsCredentials]] = None,
+        bucket_url: str,
+        credentials: Optional[Union[AbstractFileSystem, AwsCredentials, dict]] = None,
+        format: str = "parquet",
         **kwargs,
     ) -> "FluentPipeline":
-        """Configure S3 as pipeline destination."""
+        """Configure S3 as destination.
+        
+        Args:
+            bucket_url: S3 bucket URL (required)
+            credentials: AWS credentials or filesystem credentials
+            format: Output format - parquet, jsonl, or csv (default: parquet)
+        """
         self._destination = {
             "destination": "filesystem",
             "bucket_url": bucket_url,
             "credentials": credentials,
+            "format": format,
             **kwargs,
         }
         return self
